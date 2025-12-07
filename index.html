@@ -35,27 +35,27 @@
         font-size: 32px;
         text-shadow: 2px 2px 4px black;
     }
+	.btn {
+	    display: block;
+	    width: 260px;
+	    margin: 12px auto;
+	    padding: 14px;
+	    font-size: 17px;
+	    font-weight: 600;
+	    color: #ffffff;
+	    text-decoration: none;
+	    background: rgba(255, 255, 255, 0.12);
+	    border: 1px solid rgba(255, 255, 255, 0.25);
+	    border-radius: 4px; /* ← Coins très légers, style pro */
+	    transition: 0.2s ease;
+	}
+	
+	.btn:hover {
+	    background: rgba(255, 255, 255, 0.20);
+	    border-color: rgba(255, 255, 255, 0.35);
+	    transform: translateY(-2px);
+	}
 
-    .btn {
-        display: block;
-        width: 260px;
-        margin: 12px auto;
-        padding: 14px;
-        font-size: 18px;
-        font-weight: bold;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        color: white;
-        background: #0077ff;
-        transition: 0.2s;
-        text-decoration: none;
-    }
-
-    .btn:hover {
-        background: #005ad1;
-        transform: scale(1.04);
-    }
 	#credit {
     position: fixed;
     bottom: 10px;
@@ -104,3 +104,4 @@
 
 </body>
 </html>
+

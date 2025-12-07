@@ -215,6 +215,12 @@ function makeMove(from, to) {
 
     if (piece === "wP" && to[1] === "8") position[to] = "wQ";
     if (piece === "bP" && to[1] === "1") position[to] = "bQ";
+	
+	// Nettoyer la sélection après un déplacement
+	document.querySelectorAll(".case.selected")
+		.forEach(c => c.classList.remove("selected"));
+	selectedSquare = null;
+
 
     refreshBoard();
     analyse();

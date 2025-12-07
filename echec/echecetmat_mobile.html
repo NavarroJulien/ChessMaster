@@ -78,19 +78,19 @@
 
 <body>
 
-<h2>CHEAT – Mobile</h2>
-<p>Tape une pièce puis sa destination.</p>
+<h2>CHEAT</h2>
+<p>Clique une pièce → clique une destination.</p>
 
-<button id="undoBtn">↩️ Annuler</button>
 <button id="flipBtn">🔄 Inverser l'échiquier</button>
+<button id="undoBtn">↩️ Annuler</button>
 
 <div id="board"></div>
 
-<div id="bestMoveWhite">Meilleur coup blancs : (analyse…)</div>
-<div id="bestMoveBlack">Meilleur coup noirs : (analyse…)</div>
+<div id="bestMoveWhite">Meilleur coup blancs : (en attente…)</div>
+<div id="bestMoveBlack">Meilleur coup noirs : (en attente…)</div>
 
 <script>
-// ==== STOCKFISH ====
+// ========= STOCKFISH =========
 async function createEngine() {
     const response = await fetch("https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js");
     const text = await response.text();
@@ -100,8 +100,6 @@ async function createEngine() {
 
 let engine = null;
 let engineReady = false;
-let history = [];
-let flipped = false;
 
 (async () => {
     engine = await createEngine();
@@ -112,15 +110,20 @@ let flipped = false;
     engine.postMessage("uci");
 })();
 
-// ==== IMAGES ====
+// ========= VARIABLES =========
+let history = [];
+let flipped = false;
+let selectedSquare = null;
+
+const files = ["a","b","c","d","e","f","g","h"];
+
 const piecesImg = {
-    "wK": "chess/wK.png","wQ": "chess/wQ.png","wR": "chess/wR.png",
-    "wB": "chess/wB.png","wN": "chess/wN.png","wP": "chess/wP.png",
-    "bK": "chess/bK.png","bQ": "chess/bQ.png","bR": "chess/bR.png",
-    "bB": "chess/bB.png","bN": "chess/bN.png","bP": "chess/bP.png"
+    "wK": "chess/wK.png", "wQ": "chess/wQ.png", "wR": "chess/wR.png",
+    "wB": "chess/wB.png", "wN": "chess/wN.png", "wP": "chess/wP.png",
+    "bK": "chess/bK.png", "bQ": "chess/bQ.png", "bR": "chess/bR.png",
+    "bB": "chess/bB.png", "bN": "chess/bN.png", "bP": "chess/bP.png"
 };
 
-// ==== POSITION ====
 let position = {
     a8:"bR", b8:"bN", c8:"bB", d8:"bQ", e8:"bK", f8:"bB", g8:"bN", h8:"bR",
     a7:"bP", b7:"bP", c7:"bP", d7:"bP", e7:"bP", f7:"bP", g7:"bP", h7:"bP",
@@ -128,10 +131,7 @@ let position = {
     a1:"wR", b1:"wN", c1:"wB", d1:"wQ", e1:"wK", f1:"wB", g1:"wN", h1:"wR"
 };
 
-const files = ["a","b","c","d","e","f","g","h"];
-let selectedSquare = null;
-
-// ==== CONSTRUCTION DU PLATEAU ====
+// ========= PLATEAU =========
 const board = document.getElementById("board");
 
 function renderBoard() {
@@ -181,31 +181,44 @@ function refreshBoard() {
         let cell = document.getElementById(sq);
         if (cell) cell.appendChild(img);
     }
+
+    // ➤ Restaurer la sélection visuelle
+    if (selectedSquare) {
+        let el = document.getElementById(selectedSquare);
+        if (el) el.classList.add("selected");
+    }
 }
 
 renderBoard();
 refreshBoard();
 
-// ==== CLICS ====
+// ========= CLIC PIECE =========
 function onClickSquare(sq) {
     document.querySelectorAll(".case").forEach(c => c.classList.remove("selected"));
 
     if (!selectedSquare) {
         if (position[sq]) selectedSquare = sq;
-        document.getElementById(sq).classList.add("selected");
+        let el = document.getElementById(sq);
+        if (el) el.classList.add("selected");
     } else {
         if (selectedSquare !== sq) makeMove(selectedSquare, sq);
         selectedSquare = null;
     }
 }
 
-// ==== MOUVEMENT ====
+// ========= MOUVEMENT =========
 function makeMove(from, to) {
     if (!position[from]) return;
 
     history.push(JSON.parse(JSON.stringify(position)));
 
     const piece = position[from];
+
+    const pieceName = {
+        "P": "Pion", "N": "Cavalier", "B": "Fou",
+        "R": "Tour", "Q": "Reine", "K": "Roi"
+    }[piece[1]];
+
     position[to] = piece;
     delete position[from];
 
@@ -214,9 +227,11 @@ function makeMove(from, to) {
 
     refreshBoard();
     analyse();
+
+    console.log("Tu as joué :", from + to, "(" + pieceName + ")");
 }
 
-// ==== FEN ====
+// ========= FEN =========
 function toFEN(trait="w") {
     let fen = "";
     for (let r = 8; r >= 1; r--) {
@@ -236,21 +251,29 @@ function toFEN(trait="w") {
     return fen + " " + trait + " KQkq - 0 1";
 }
 
-// ==== ANALYSE ====
+// ========= ANALYSE =========
 function analyse() {
     if (!engineReady) return;
 
     engine.postMessage("stop");
     engine.postMessage("position fen " + toFEN("w"));
-    engine.postMessage("go depth 10");
+    engine.postMessage("go depth 12");
 
     engine.onmessage = (e) => {
         let line = e.data;
         if (!line.includes("bestmove")) return;
 
         let best = line.split(" ")[1];
+        let sqFrom = best.substring(0,2);
+        let pieceChar = position[sqFrom]?.[1] || "P";
+
+        const pieceName = {
+            "P": "Pion", "N": "Cavalier", "B": "Fou",
+            "R": "Tour", "Q": "Reine", "K": "Roi"
+        }[pieceChar];
+
         document.getElementById("bestMoveWhite").textContent =
-            "Meilleur coup blancs : " + best;
+            "Meilleur coup blancs : " + best + " (" + pieceName + ")";
 
         analyseBlack();
     };
@@ -259,19 +282,27 @@ function analyse() {
 function analyseBlack() {
     engine.postMessage("stop");
     engine.postMessage("position fen " + toFEN("b"));
-    engine.postMessage("go depth 10");
+    engine.postMessage("go depth 12");
 
     engine.onmessage = (e) => {
         let line = e.data;
         if (!line.includes("bestmove")) return;
 
         let best = line.split(" ")[1];
+        let sqFrom = best.substring(0,2);
+        let pieceChar = position[sqFrom]?.[1] || "P";
+
+        const pieceName = {
+            "P": "Pion", "N": "Cavalier", "B": "Fou",
+            "R": "Tour", "Q": "Reine", "K": "Roi"
+        }[pieceChar];
+
         document.getElementById("bestMoveBlack").textContent =
-            "Meilleur coup noirs : " + best;
+            "Meilleur coup noirs : " + best + " (" + pieceName + ")";
     };
 }
 
-// ==== UNDO ====
+// ========= UNDO =========
 document.getElementById("undoBtn").onclick = () => {
     if (history.length === 0) return;
     position = history.pop();
@@ -279,7 +310,7 @@ document.getElementById("undoBtn").onclick = () => {
     analyse();
 };
 
-// ==== FLIP ====
+// ========= FLIP =========
 document.getElementById("flipBtn").onclick = () => {
     flipped = !flipped;
     refreshBoard();

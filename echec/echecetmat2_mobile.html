@@ -1,0 +1,476 @@
+ <!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<title>Coach d'échecs – Version Mobile</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+<style>
+    body { 
+        font-family: Arial, sans-serif; 
+        background:#f5f5f5; 
+        padding:10px; 
+        text-align:center;
+    }
+
+    h2 { margin-bottom:5px; }
+
+    /* Plateau chess responsive */
+    #board { 
+        width: 90vw;
+        height: 90vw;
+        max-width: 430px;
+        max-height: 430px;
+        margin: 0 auto 15px auto;
+
+        display: grid; 
+        grid-template-columns: repeat(8, 1fr);
+        grid-template-rows: repeat(8, 1fr);
+
+        border: 2px solid #333;
+        background:#000;
+    }
+
+    .case {
+        position: relative;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        cursor: pointer;
+    }
+
+    .clair { background: #f0d9b5; }
+    .fonce { background: #b58863; }
+
+    .case.selected {
+        outline: 3px solid red;
+    }
+
+    /* Pièces adaptatives */
+    .piece {
+        width: 9vw;
+        height: 9vw;
+        max-width: 48px;
+        max-height: 48px;
+        pointer-events: none;
+    }
+
+    /* Coordonnées */
+    .coord {
+        position: absolute;
+        font-size: 10px;
+        font-weight: bold;
+        color: rgba(255,255,255,0.9);
+        text-shadow: 1px 1px 2px #000;
+        pointer-events: none;
+    }
+    .coord-file { bottom: 2px; right: 3px; }
+    .coord-rank { top: 2px; left: 3px; }
+
+    /* Bouton annuler */
+    #undoBtn {
+        padding:10px 14px;
+        font-size:16px;
+        cursor:pointer;
+        margin-bottom:10px;
+    }
+
+    /* Analyse sous forme verticale */
+    #analysisPanel {
+        background:#fff;
+        border:1px solid #ccc;
+        padding:10px;
+        width: 92%;
+        margin: 0 auto;
+        max-height: 400px;
+        overflow-y: auto;
+        text-align:left;
+    }
+
+    #analysisPanel h3 {
+        margin-top:0;
+        font-size:18px;
+    }
+
+    .moveAnalysis {
+        border-bottom: 1px solid #eee;
+        padding:6px 0;
+        font-size:14px;
+    }
+
+    .moveHeader {
+        font-weight:bold;
+        margin-bottom:3px;
+    }
+
+    .severity-good { color: #2e7d32; }
+    .severity-inaccuracy { color: #f9a825; }
+    .severity-mistake { color: #fb8c00; }
+    .severity-blunder { color: #c62828; }
+
+    .evalLine { font-size: 13px; color: #555; }
+    .explainLine { margin-top:3px; }
+</style>
+</head>
+
+<body>
+
+<h2>Coach d’échecs – Version Mobile</h2>
+<p>Tape une pièce → une destination. Le coach commente chaque coup.</p>
+
+<!-- Plateau -->
+<div id="board"></div>
+
+<!-- Annuler -->
+<button id="undoBtn">↩️ Annuler</button>
+
+<!-- Analyse -->
+<div id="analysisPanel">
+    <h3>Analyse des coups</h3>
+    <div id="movesLog">
+        <div class="moveAnalysis">Le coach commentera ici.</div>
+    </div>
+</div>
+
+<script>
+/* ==== CHARGEMENT STOCKFISH ==== */
+async function createEngine() {
+    const response = await fetch("https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js");
+    const text = await response.text();
+    const blob = new Blob([text], { type: "application/javascript" });
+    return new Worker(URL.createObjectURL(blob));
+}
+
+let engine = null;
+let engineReady = false;
+
+/* Historique */
+let history = [];
+let turnHistory = [];
+
+let analysisPhase = null;
+let analysisContext = null;
+let lastEvalCp = null;
+
+const files = ["a","b","c","d","e","f","g","h"];
+
+let sideToMove = "w";
+let plyCount = 0;
+
+/* ==== DÉMARRAGE ==== */
+(async () => {
+    engine = await createEngine();
+    engine.onmessage = (e) => {
+        const line = e.data;
+        if (typeof line !== "string") return;
+        if (line.includes("uciok")) engineReady = true;
+        handleEngineMessage(line);
+    };
+    engine.postMessage("uci");
+})();
+
+/* ==== IMAGES ==== */
+const piecesImg = {
+    "wK": "chess/wK.png",
+    "wQ": "chess/wQ.png",
+    "wR": "chess/wR.png",
+    "wB": "chess/wB.png",
+    "wN": "chess/wN.png",
+    "wP": "chess/wP.png",
+    "bK": "chess/bK.png",
+    "bQ": "chess/bQ.png",
+    "bR": "chess/bR.png",
+    "bB": "chess/bB.png",
+    "bN": "chess/bN.png",
+    "bP": "chess/bP.png"
+};
+
+/* ==== POSITION ==== */
+let position = {
+    a8:"bR", b8:"bN", c8:"bB", d8:"bQ", e8:"bK", f8:"bB", g8:"bN", h8:"bR",
+    a7:"bP", b7:"bP", c7:"bP", d7:"bP", e7:"bP", f7:"bP", g7:"bP", h7:"bP",
+    a2:"wP", b2:"wP", c2:"wP", d2:"wP", e2:"wP", f2:"wP", g2:"wP", h2:"wP",
+    a1:"wR", b1:"wN", c1:"wB", d1:"wQ", e1:"wK", f1:"wB", g1:"wN", h1:"wR"
+};
+
+let selectedSquare = null;
+
+/* ==== CRÉATION DU PLATEAU ==== */
+const board = document.getElementById("board");
+for (let r = 8; r >= 1; r--) {
+    for (let f = 0; f < 8; f++) {
+        let id = files[f] + r;
+        let div = document.createElement("div");
+        div.className = "case " + ((r + f) % 2 ? "fonce" : "clair");
+        div.id = id;
+        div.onclick = () => onClickSquare(id);
+
+        if (r === 1) {
+            let fileLabel = document.createElement("div");
+            fileLabel.className = "coord coord-file";
+            fileLabel.textContent = files[f];
+            div.appendChild(fileLabel);
+        }
+        if (f === 0) {
+            let rankLabel = document.createElement("div");
+            rankLabel.className = "coord coord-rank";
+            rankLabel.textContent = r;
+            div.appendChild(rankLabel);
+        }
+
+        board.appendChild(div);
+    }
+}
+
+/* ==== AFFICHAGE ==== */
+function refreshBoard() {
+    document.querySelectorAll(".case img").forEach(img => img.remove());
+    for (let sq in position) {
+        let p = position[sq];
+        if (p) {
+            let img = document.createElement("img");
+            img.src = piecesImg[p];
+            img.className = "piece";
+            document.getElementById(sq).appendChild(img);
+        }
+    }
+}
+refreshBoard();
+
+/* ==== CLIC ==== */
+function onClickSquare(sq) {
+    document.querySelectorAll(".case.selected").forEach(el => el.classList.remove("selected"));
+
+    if (!selectedSquare) {
+        if (position[sq]) {
+            selectedSquare = sq;
+            document.getElementById(sq).classList.add("selected");
+        }
+    } else {
+        if (selectedSquare !== sq) makeMove(selectedSquare, sq);
+        selectedSquare = null;
+    }
+}
+
+/* ==== MOUVEMENT ==== */
+function makeMove(from, to) {
+    if (!position[from]) return;
+
+    const movingPiece = position[from];
+    const sideBefore = sideToMove;
+    let playerMove = from + to;
+
+    const oldPos = JSON.parse(JSON.stringify(position));
+    history.push(JSON.parse(JSON.stringify(position)));
+    turnHistory.push(sideToMove);
+
+    position[to] = movingPiece;
+    delete position[from];
+
+    if (movingPiece === "wP" && to[1] === "8") { position[to] = "wQ"; playerMove = from+to+"q"; }
+    if (movingPiece === "bP" && to[1] === "1") { position[to] = "bQ"; playerMove = from+to+"q"; }
+
+    sideToMove = (sideToMove === "w") ? "b" : "w";
+    plyCount++;
+
+    refreshBoard();
+    analyseLastMove(oldPos, sideBefore, playerMove);
+}
+
+/* ==== FEN ==== */
+function toFENFrom(pos, trait="w") {
+    let fen = "";
+    for (let r = 8; r >= 1; r--) {
+        let empty = 0;
+        for (let f = 0; f < 8; f++) {
+            let sq = files[f] + r;
+            if (!pos[sq]) empty++;
+            else {
+                if (empty) { fen += empty; empty = 0; }
+                let p = pos[sq];
+                fen += p[0] === "w" ? p[1].toUpperCase() : p[1].toLowerCase();
+            }
+        }
+        if (empty) fen += empty;
+        if (r > 1) fen += "/";
+    }
+    return fen + " " + trait + " KQkq - 0 1";
+}
+
+function applyUCIMove(pos, uciMove) {
+    const from = uciMove.substring(0,2);
+    const to   = uciMove.substring(2,4);
+    const promo= uciMove.length>=5 ? uciMove[4] : null;
+
+    const newPos = JSON.parse(JSON.stringify(pos));
+    if (!newPos[from]) return newPos;
+
+    let piece = newPos[from];
+    delete newPos[from];
+
+    if (promo) {
+        const color = piece[0];
+        const map = { q:"Q", r:"R", b:"B", n:"N" };
+        const promoLetter = map[promo.toLowerCase()] || "Q";
+        piece = color + promoLetter;
+    }
+
+    newPos[to] = piece;
+    return newPos;
+}
+
+/* ==== ANALYSE ==== */
+function analyseLastMove(oldPos, sideToMoveBefore, playerMove) {
+
+    const fenBefore = toFENFrom(oldPos, sideToMoveBefore);
+
+    analysisContext = {
+        oldPos,
+        sideToMoveBefore,
+        playerMove,
+        fenBefore,
+        bestMove: null,
+        evalBefore: null,
+        evalAfterPlayer: null,
+        evalAfterBest: null,
+        fenAfterPlayer: null,
+        fenAfterBest: null
+    };
+
+    analysisPhase = "bestLineBefore";
+    lastEvalCp = null;
+
+    engine.postMessage("stop");
+    engine.postMessage("position fen " + fenBefore);
+    engine.postMessage("go depth 10");
+}
+
+function handleEngineMessage(line) {
+    if (!analysisPhase) return;
+
+    if (line.includes("score")) {
+        const parts = line.split(" ");
+        const i = parts.indexOf("cp");
+        if (i !== -1 && parts[i+1]) {
+            lastEvalCp = parseInt(parts[i+1]) || 0;
+        }
+    }
+
+    if (line.startsWith("bestmove")) {
+        const best = line.split(" ")[1];
+
+        if (analysisPhase === "bestLineBefore") {
+            if (!best || best === "(none)") { analysisPhase=null; return; }
+
+            analysisContext.bestMove = best;
+            analysisContext.evalBefore = lastEvalCp ?? 0;
+
+            const posAfterPlayer = applyUCIMove(analysisContext.oldPos, analysisContext.playerMove);
+            const posAfterBest   = applyUCIMove(analysisContext.oldPos, analysisContext.bestMove);
+
+            const traitAfter = (analysisContext.sideToMoveBefore === "w") ? "b":"w";
+
+            analysisContext.fenAfterPlayer = toFENFrom(posAfterPlayer, traitAfter);
+            analysisContext.fenAfterBest   = toFENFrom(posAfterBest, traitAfter);
+
+            analysisPhase = "evalPlayer";
+            lastEvalCp = null;
+
+            engine.postMessage("stop");
+            engine.postMessage("position fen " + analysisContext.fenAfterPlayer);
+            engine.postMessage("go depth 10");
+
+        } else if (analysisPhase === "evalPlayer") {
+            analysisContext.evalAfterPlayer = lastEvalCp ?? 0;
+
+            analysisPhase = "evalBest";
+            lastEvalCp = null;
+
+            engine.postMessage("stop");
+            engine.postMessage("position fen " + analysisContext.fenAfterBest);
+            engine.postMessage("go depth 10");
+
+        } else if (analysisPhase === "evalBest") {
+            analysisContext.evalAfterBest = lastEvalCp ?? 0;
+
+            analysisPhase = null;
+            buildExplanation(analysisContext);
+        }
+    }
+}
+
+/* ==== EXPLICATION ==== */
+function buildExplanation(ctx) {
+    const side = ctx.sideToMoveBefore === "w" ? "Blancs":"Noirs";
+
+    const evalBeforePlayer = ctx.evalBefore;
+    const evalAfterPlayerPlayer = -ctx.evalAfterPlayer;
+    const evalAfterBestPlayer   = -ctx.evalAfterBest;
+
+    const lossVsBest = evalAfterBestPlayer - evalAfterPlayerPlayer;
+
+    let severityClass = "severity-good";
+    let severityLabel = "Bon coup";
+    let emoji = "✅";
+
+    const absLoss = Math.abs(lossVsBest);
+
+    if (absLoss < 30) {
+        severityClass = "severity-good";
+        severityLabel = "Coup correct";
+        emoji = "✅";
+    } 
+    else if (absLoss < 80) {
+        severityClass = "severity-inaccuracy";
+        severityLabel = "Imprécision";
+        emoji = "⚠️";
+    }
+    else if (absLoss < 200) {
+        severityClass = "severity-mistake";
+        severityLabel = "Erreur";
+        emoji = "❌";
+    }
+    else {
+        severityClass = "severity-blunder";
+        severityLabel = "Gaffe";
+        emoji = "💀";
+    }
+
+    const toPawns = (cp) => (cp/100).toFixed(2);
+
+    const container = document.createElement("div");
+    container.className = "moveAnalysis";
+
+    const header = document.createElement("div");
+    header.className = "moveHeader " + severityClass;
+    header.textContent = `${emoji} Coup #${plyCount} (${side}) – ${severityLabel}`;
+
+    const evalLine = document.createElement("div");
+    evalLine.className = "evalLine";
+    evalLine.textContent =
+        `Tu as joué : ${ctx.playerMove} | Meilleur coup : ${ctx.bestMove} | ` +
+        `Éval avant : ${toPawns(evalBeforePlayer)} | ` +
+        `Après ton coup : ${toPawns(evalAfterPlayerPlayer)} | ` +
+        `Après meilleur : ${toPawns(evalAfterBestPlayer)} | ` +
+        `Perte : ${toPawns(lossVsBest)} pions`;
+
+    container.appendChild(header);
+    container.appendChild(evalLine);
+
+    document.getElementById("movesLog").appendChild(container);
+}
+
+/* ==== UNDO ==== */
+function undoMove() {
+    if (history.length === 0) return;
+    position = history.pop();
+    sideToMove = turnHistory.pop() || "w";
+    plyCount = Math.max(0, plyCount - 1);
+    refreshBoard();
+}
+document.getElementById("undoBtn").onclick = undoMove;
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<script>
+/* Si mobile → redirection */
+if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+    window.location.href = "echecetmat3_mobile.html";
+}
+</script>
+<meta charset="UTF-8">
+<title>Puzzles – Mat en 2/3 (Mobile)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        padding: 10px;
+        text-align: center;
+        background: #eaeaea;
+    }
+
+    #board {
+        width: 95vw;
+        height: 95vw;
+        max-width: 440px;
+        max-height: 440px;
+        margin: 0 auto 15px auto;
+
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        grid-template-rows: repeat(8, 1fr);
+
+        border: 2px solid #333;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #000;
+    }
+
+    .case {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+    }
+
+    .clair { background: #f0d9b5; }
+    .fonce { background: #b58863; }
+
+    .case.selected {
+        outline: 3px solid red;
+        box-sizing: border-box;
+    }
+
+    .piece {
+        width: 11vw;
+        height: 11vw;
+        max-width: 52px;
+        max-height: 52px;
+        pointer-events: none;
+    }
+
+    button {
+        padding: 8px 12px;
+        font-size: 16px;
+        margin: 4px;
+        border-radius: 6px;
+        border: 1px solid #444;
+        background: #fff;
+        cursor: pointer;
+    }
+
+    #status {
+        margin-top: 8px;
+        font-size: 15px;
+    }
+</style>
+</head>
+
+<body>
+
+<h2>Puzzles – Mat en 2/3 coups</h2>
+<p>Tape les coups du camp indiqué pour réaliser le mat.</p>
+
+<div>
+    <button id="restartBtn">↻ Recommencer ce problème</button>
+    <button id="nextBtn">⏭ Problème suivant</button>
+    <button id="undoBtn">↩️ Annuler le dernier coup</button>
+</div>
+
+<div id="board"></div>
+
+<div id="status"></div>
+
+<script>
+// ====== TABLEAU DE PUZZLES ======
+// Chaque puzzle contient :
+// - startPosition : position de départ (objet { "case": "piece" })
+// - sideToMove    : "w" ou "b" (camp qui commence le puzzle)
+// - mateIn        : 2 ou 3 (nombre de coups du camp à jouer)
+// - solution      : liste de coups UCI, en alternant joueur / adversaire
+//   ex: ["h5h7", "g8h7", "f1f8"] → 1er et 3e coups = joueur, 2e = réponse adverse
+
+const puzzles = [
+    {
+        name: "Puzzle 1",
+        mateIn: 2,
+        sideToMove: "w",
+        startPosition: {
+            g1:"wK", h5:"wQ", f1:"wR",
+            g8:"bK"
+        },
+        // 1. Qh7+ Kxh7 2. Rf8#
+        solution: ["h5h7", "g8h7", "f1f8"]
+    },
+    {
+        name: "Puzzle 2",
+        mateIn: 2,
+        sideToMove: "w",
+        startPosition: {
+            g1:"wK", d5:"wQ", c4:"wB",
+            h8:"bK", f8:"bR"
+        },
+        // 1. Qg8+ Rxg8 2. Bxg8#
+        solution: ["d5g8", "f8g8", "c4g8"]
+    },
+    {
+        name: "Puzzle 3",
+        mateIn: 3,
+        sideToMove: "w",
+        startPosition: {
+            g1:"wK", h6:"wQ", f1:"wR", c4:"wB",
+            g8:"bK", g7:"bP", f8:"bR"
+        },
+        // 1. Qxg7+ Kxg7 2. Rxf8 Kxf8 3. Bxf7#
+        solution: ["h6g7", "g8g7", "f1f8", "g7f8", "c4f7"]
+    }
+];
+
+// ====== VARIABLES GLOBALES ======
+let position = {};
+const files = ["a","b","c","d","e","f","g","h"];
+let selectedSquare = null;
+let history = [];
+let currentPuzzleIndex = 0;
+let currentMoveIndex = 0;  // index dans solution[]
+let sideToMove = "w";      // camp qui joue (info affichée; les réponses adverses sont auto)
+
+// images des pièces
+const piecesImg = {
+    "wK": "chess/wK.png", "wQ": "chess/wQ.png", "wR": "chess/wR.png",
+    "wB": "chess/wB.png", "wN": "chess/wN.png", "wP": "chess/wP.png",
+    "bK": "chess/bK.png", "bQ": "chess/bQ.png", "bR": "chess/bR.png",
+    "bB": "chess/bB.png", "bN": "chess/bN.png", "bP": "chess/bP.png"
+};
+
+// ====== PLATEAU ======
+const board = document.getElementById("board");
+
+function renderBoard() {
+    board.innerHTML = "";
+    for (let r = 8; r >= 1; r--) {
+        for (let f = 0; f < 8; f++) {
+            let id = files[f] + r;
+            let div = document.createElement("div");
+            div.className = "case " + ((r + f) % 2 ? "fonce" : "clair");
+            div.id = id;
+            div.onclick = () => onClickSquare(id);
+            board.appendChild(div);
+        }
+    }
+}
+
+function refreshBoard() {
+    renderBoard();
+
+    for (let sq in position) {
+        if (!position[sq]) continue;
+        let img = document.createElement("img");
+        img.src = piecesImg[position[sq]];
+        img.className = "piece";
+        let cell = document.getElementById(sq);
+        if (cell) cell.appendChild(img);
+    }
+
+    // Remettre la sélection visuelle si besoin
+    if (selectedSquare) {
+        let el = document.getElementById(selectedSquare);
+        if (el) el.classList.add("selected");
+    }
+}
+
+// ====== GESTION DU PUZZLE ======
+function deepCopyPosition(pos) {
+    return JSON.parse(JSON.stringify(pos));
+}
+
+function loadPuzzle(index) {
+    const pz = puzzles[index];
+    // copie de la position de départ
+    position = deepCopyPosition(pz.startPosition);
+    sideToMove = pz.sideToMove;
+    currentMoveIndex = 0;
+    history = [];
+    selectedSquare = null;
+
+    refreshBoard();
+
+    const campText = (sideToMove === "w") ? "Blancs" : "Noirs";
+    document.getElementById("status").textContent =
+        `${pz.name} – Mat en ${pz.mateIn} coups – À ${campText} de jouer.`;
+}
+
+// applique un coup UCI sur "position"
+function applyMove(uci, pushHistory = true) {
+    const from = uci.substring(0,2);
+    const to = uci.substring(2,4);
+
+    if (pushHistory) {
+        history.push({
+            position: deepCopyPosition(position),
+            moveIndex: currentMoveIndex,
+            sideToMove: sideToMove
+        });
+    }
+
+    if (!position[from]) return;
+
+    const piece = position[from];
+    delete position[from];
+
+    // (pas de promotions dans ces puzzles; si tu veux en ajouter, tu peux gérer uci[4])
+    position[to] = piece;
+
+    // change le trait à chaque coup
+    sideToMove = (sideToMove === "w") ? "b" : "w";
+}
+
+// ====== CLICS SUR LES CASES ======
+function onClickSquare(sq) {
+    // désélection visuelle
+    document.querySelectorAll(".case").forEach(c => c.classList.remove("selected"));
+
+    if (!selectedSquare) {
+        // première case : on sélectionne une pièce
+        if (position[sq]) {
+            selectedSquare = sq;
+            document.getElementById(sq).classList.add("selected");
+        }
+    } else {
+        // deuxième case : tentative de coup
+        if (selectedSquare !== sq) {
+            handlePlayerMove(selectedSquare, sq);
+        }
+        selectedSquare = null;
+    }
+}
+
+function handlePlayerMove(from, to) {
+    const pz = puzzles[currentPuzzleIndex];
+    if (!pz) return;
+
+    const uci = from + to;
+    const solution = pz.solution;
+
+    if (currentMoveIndex >= solution.length) {
+        document.getElementById("status").textContent += " (Puzzle déjà terminé.)";
+        return;
+    }
+
+    const expected = solution[currentMoveIndex];
+
+    if (uci !== expected) {
+        document.getElementById("status").textContent =
+            "Ce n'est pas le coup gagnant. Essaie encore.";
+        refreshBoard();
+        return;
+    }
+
+    // coup correct : on l'applique
+    applyMove(uci, true);
+    currentMoveIndex++;
+    refreshBoard();
+
+    // Vérifier si le puzzle est terminé
+    if (currentMoveIndex >= solution.length) {
+        document.getElementById("status").textContent =
+            `Bravo ! Tu as réalisé le mat en ${pz.mateIn} coups.`;
+        return;
+    }
+
+    // Sinon, on joue la réponse de l'adversaire automatiquement
+    const reply = solution[currentMoveIndex];
+    applyMove(reply, true);
+    currentMoveIndex++;
+    refreshBoard();
+
+    if (currentMoveIndex >= solution.length) {
+        document.getElementById("status").textContent =
+            `Bravo ! Tu as réalisé le mat en ${pz.mateIn} coups.`;
+    } else {
+        const campText = (sideToMove === "w") ? "Blancs" : "Noirs";
+        document.getElementById("status").textContent =
+            `${pz.name} – Mat en ${pz.mateIn} coups – À ${campText} de jouer.`;
+    }
+}
+
+// ====== BOUTONS ======
+document.getElementById("restartBtn").onclick = () => {
+    loadPuzzle(currentPuzzleIndex);
+};
+
+document.getElementById("nextBtn").onclick = () => {
+    currentPuzzleIndex = (currentPuzzleIndex + 1) % puzzles.length;
+    loadPuzzle(currentPuzzleIndex);
+};
+
+document.getElementById("undoBtn").onclick = () => {
+    if (history.length === 0) return;
+    const last = history.pop();
+    position = last.position;
+    currentMoveIndex = last.moveIndex;
+    sideToMove = last.sideToMove;
+    selectedSquare = null;
+    refreshBoard();
+
+    const pz = puzzles[currentPuzzleIndex];
+    const campText = (sideToMove === "w") ? "Blancs" : "Noirs";
+    document.getElementById("status").textContent =
+        `${pz.name} – Mat en ${pz.mateIn} coups – À ${campText} de jouer. (coup annulé)`;
+};
+
+// ====== INIT ======
+renderBoard();
+loadPuzzle(currentPuzzleIndex);
+
+</script>
+
+</body>
+</html>

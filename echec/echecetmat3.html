@@ -246,11 +246,21 @@ if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
 const files = ["a","b","c","d","e","f","g","h"];
 
 const piecesImg = {
-    "wK": "chess/wK.png", "wQ": "chess/wQ.png", "wR": "chess/wR.png",
-    "wB": "chess/wB.png", "wN": "chess/wN.png", "wP": "chess/wP.png",
-    "bK": "chess/bK.png", "bQ": "chess/bQ.png", "bR": "chess/bR.png",
-    "bB": "chess/bB.png", "bN": "chess/bN.png", "bP": "chess/bP.png"
+    "wK": "./chess/wK.png",
+    "wQ": "./chess/wQ.png",
+    "wR": "./chess/wR.png",
+    "wB": "./chess/wB.png",
+    "wN": "./chess/wN.png",
+    "wP": "./chess/wP.png",
+    
+    "bK": "./chess/bK.png",
+    "bQ": "./chess/bQ.png",
+    "bR": "./chess/bR.png",
+    "bB": "./chess/bB.png",
+    "bN": "./chess/bN.png",
+    "bP": "./chess/bP.png"
 };
+
 
 let position = {};             // { "e4": "wQ", ... }
 let sideToMove = "w";
@@ -802,3 +812,4 @@ statusDiv.textContent = "Initialisation du moteur…";
 
 </body>
 </html>
+

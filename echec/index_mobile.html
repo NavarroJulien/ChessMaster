@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Accueil – Chess Master</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+    /* ====== GLOBAL ====== */
+    body {
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        color: white;
+        text-align: center;
+
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+
+        /* Fond */
+        background: url("echec/fdechess2.png") no-repeat center center fixed;
+        background-size: cover;
+    }
+
+    /* ====== LOGO GIGANTESQUE ====== */
+    #logo {
+        width: 80vw;          /* prend 80% de la largeur de l'écran */
+        max-width: 380px;     /* limite sur grand écran */
+        margin-top: 40px;
+        margin-bottom: 10px;
+
+        filter: drop-shadow(0 0 14px rgba(0,0,0,0.85));
+        animation: logoPop 0.9s ease-out;
+    }
+
+    @keyframes logoPop {
+        0% { transform: scale(0.2); opacity: 0; }
+        60% { transform: scale(1.15); opacity: 1; }
+        100% { transform: scale(1); }
+    }
+
+    /* ====== MENU EN BAS DE PAGE ====== */
+    #menu {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+
+        background: rgba(0,0,0,0.55);
+        backdrop-filter: blur(6px);
+        padding: 25px 10px 30px 10px;
+
+        border-top-left-radius: 20px;
+        border-top-right-radius: 20px;
+
+        box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+
+        animation: slideUp 0.9s ease-out;
+    }
+
+    @keyframes slideUp {
+        from { transform: translateY(100%); opacity: 0; }
+        to   { transform: translateY(0); opacity: 1; }
+    }
+
+    /* ====== BOUTONS ====== */
+    .btn {
+        display: block;
+        width: 90%;
+        max-width: 350px;
+        margin: 10px auto;
+
+        padding: 13px;
+        font-size: 16px;
+        font-weight: 600;
+        text-decoration: none;
+        color: white;
+
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.25);
+        border-radius: 12px;
+
+        transition: 0.25s ease;
+    }
+
+    .btn:hover {
+        background: rgba(255,255,255,0.22);
+        transform: translateY(-3px);
+    }
+
+    /* ====== CRÉDIT ====== */
+    #credit {
+        margin-top: 12px;
+        font-size: 12px;
+        opacity: 0.85;
+        text-shadow: 1px 1px 2px black;
+    }
+
+</style>
+</head>
+
+<body>
+
+<!-- LOGO ENORME MOBILE -->
+<img id="logo" src="logo.png" alt="Logo">
+
+<!-- MENU FIXÉ EN BAS -->
+<div id="menu">
+    <a href="echecetmat_mobile.html" class="btn">CHEAT</a>
+    <a href="echecetmat2_mobile.html" class="btn">COACH</a>
+    <a href="chesslibre_mobile.html" class="btn">Partie 1v1</a>
+    <a href="echecetmat3_mobile.html" class="btn">Problèmes</a>
+
+    <div id="credit">
+        Créé par <b>NAVARRO Julien</b><br>
+        <small>contact : 94navarrojulien@gmail.com</small>
+    </div>
+</div>
+
+</body>
+</html>
